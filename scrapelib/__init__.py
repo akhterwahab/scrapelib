@@ -200,7 +200,8 @@ class Scraper(CachingSession, ThrottledSession, RetrySession):
         subsequent retries will double this wait
     """
     def __init__(self, raise_errors=True, requests_per_minute=60, retry_attempts=0,
-                 retry_wait_seconds=5, header_func=None):
+                 retry_wait_seconds=5, header_func=None, proxy_auth=None, proxies=None,
+                 proxy_verify_paths=None):
 
         super(Scraper, self).__init__()
         self.mount('ftp://', FTPAdapter())
@@ -225,6 +226,14 @@ class Scraper(CachingSession, ThrottledSession, RetrySession):
         # non-parameter options
         self.timeout = None
         self.user_agent = _user_agent
+
+        # proxy-related settings
+        self.proxy_auth = proxy_auth
+        self.proxies = proxies
+        self.proxy_verify_paths = proxy_verify_paths
+        if ((self.proxy_auth or self.proxies or self.proxy_verify_paths) and not
+            (self.proxy_auth and self.proxies and self.proxy_verify_paths)):
+            raise Exception("Not all the proxy settings are set up, please fix and try again")
 
         # statistics structure
         self.reset_stats()
@@ -275,6 +284,13 @@ class Scraper(CachingSession, ThrottledSession, RetrySession):
             kwarg_headers, headers,
             dict_class=requests.structures.CaseInsensitiveDict)
 
+        if (self.proxy_auth and self.proxies and self.proxy_verify_paths):
+            kwargs['auth'] = self.proxy_auth
+            kwargs['proxies'] = self.proxies
+            if url.startswith('https'):
+                kwargs['verify'] = self.proxy_verify_paths['https']
+            else:
+                kwargs['verify'] = self.proxy_verify_paths['http']
         _start_time = time.time()
 
         resp = super(Scraper, self).request(method, url, timeout=timeout, headers=headers,
